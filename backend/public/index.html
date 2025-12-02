@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mock Trade Analyzer</title>
+  <style>
+    :root {
+      --bg: #0d1b2a;
+      --panel: #0f2236;
+      --text: #e0e7ff;
+      --muted: #9aa6c0;
+      --accent: #3b82f6;
+      --border: #152a42;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: #0f1f33;
+    }
+    h1 { margin: 0; font-size: 20px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 20px; display: grid; gap: 14px; }
+    .card {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      padding: 12px 0;
+    }
+    label { display: block; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
+    select, input[type="text"], button {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #0c1b2b;
+      color: var(--text);
+      font-size: 14px;
+    }
+    button {
+      background: var(--accent);
+      color: #e8f0ff;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid #2f66c2;
+    }
+    button:hover { opacity: 0.9; }
+    button:active { opacity: 0.85; }
+    .flex { display: flex; gap: 10px; }
+    .flex > * { flex: 1; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .badge { padding: 4px 8px; border-radius: 6px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; background: #0c1b2b; color: var(--text); border: 1px solid var(--border); }
+    .badge.yes { background: rgba(52,211,153,0.15); color: #34d399; border-color: rgba(52,211,153,0.4); }
+    .badge.no { background: rgba(239,68,68,0.1); color: #fca5a5; border-color: rgba(239,68,68,0.35); }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); }
+    .verdict { font-size: 18px; font-weight: 700; margin: 0 0 8px 0; }
+    .rationale { margin: 0; padding-left: 16px; color: var(--muted); }
+    @media (max-width: 800px) {
+      main { padding: 14px; }
+      .flex { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mock League Trade Analyzer</h1>
+    <div class="muted">Select your team, propose a trade, and get a quick verdict. Yahoo valuations are used when available.</div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="flex">
+        <div>
+          <label for="yourTeam">Your Team</label>
+          <select id="yourTeam"></select>
+        </div>
+        <div>
+          <label for="otherTeam">Other Team</label>
+          <select id="otherTeam"></select>
+        </div>
+      </div>
+      <div class="flex" style="margin-top:12px;">
+        <div>
+          <label for="yourPlayers">Players you give (IDs, comma-separated)</label>
+          <input id="yourPlayers" placeholder="e.g. 4,7">
+          <div class="muted" id="yourRosterHint"></div>
+        </div>
+        <div>
+          <label for="theirPlayers">Players you get (IDs, comma-separated)</label>
+          <input id="theirPlayers" placeholder="e.g. 22">
+          <div class="muted" id="theirRosterHint"></div>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button id="analyzeBtn">Analyze Trade</button>
+      </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;">
+      <div class="verdict" id="verdictText"></div>
+      <div class="muted" id="valuationSource"></div>
+      <ul class="rationale" id="rationaleList"></ul>
+      <div class="flex" style="margin-top:12px;">
+        <div>
+          <div class="muted">Offer From Value</div>
+          <div id="fromValue" style="font-weight:700;"></div>
+        </div>
+        <div>
+          <div class="muted">Offer To Value</div>
+          <div id="toValue" style="font-weight:700;"></div>
+        </div>
+        <div>
+          <div class="muted">Delta</div>
+          <div id="delta" style="font-weight:700;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px 0;">Team Rosters</h3>
+      <div class="flex" id="rosterSection">
+        <div>
+          <div style="font-weight:700;" id="yourTeamTitle"></div>
+          <table id="yourRosterTable">
+            <thead><tr><th>ID</th><th>Player</th><th>Pos</th><th>Team</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <div style="font-weight:700;" id="otherTeamTitle"></div>
+          <table id="otherRosterTable">
+            <thead><tr><th>ID</th><th>Player</th><th>Pos</th><th>Team</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let league = null;
+
+    const els = {
+      yourTeam: document.getElementById('yourTeam'),
+      otherTeam: document.getElementById('otherTeam'),
+      yourPlayers: document.getElementById('yourPlayers'),
+      theirPlayers: document.getElementById('theirPlayers'),
+      yourRosterHint: document.getElementById('yourRosterHint'),
+      theirRosterHint: document.getElementById('theirRosterHint'),
+      analyzeBtn: document.getElementById('analyzeBtn'),
+      resultCard: document.getElementById('resultCard'),
+      verdictText: document.getElementById('verdictText'),
+      valuationSource: document.getElementById('valuationSource'),
+      rationaleList: document.getElementById('rationaleList'),
+      fromValue: document.getElementById('fromValue'),
+      toValue: document.getElementById('toValue'),
+      delta: document.getElementById('delta'),
+      yourTeamTitle: document.getElementById('yourTeamTitle'),
+      otherTeamTitle: document.getElementById('otherTeamTitle'),
+      yourRosterTable: document.querySelector('#yourRosterTable tbody'),
+      otherRosterTable: document.querySelector('#otherRosterTable tbody'),
+    };
+
+    async function loadLeague() {
+      const res = await fetch('/api/mock-league');
+      league = await res.json();
+      populateTeams();
+      renderRosters();
+      updateRosterHints();
+    }
+
+    function populateTeams() {
+      league.teams.forEach(t => {
+        const opt1 = new Option(t.name, t.teamId);
+        const opt2 = new Option(t.name, t.teamId);
+        els.yourTeam.add(opt1);
+        els.otherTeam.add(opt2);
+      });
+      if (league.teams.length > 1) {
+        els.yourTeam.value = league.teams[0].teamId;
+        els.otherTeam.value = league.teams[1].teamId;
+      }
+    }
+
+    function teamById(id) {
+      return league.teams.find(t => String(t.teamId) === String(id));
+    }
+
+    function renderRoster(tableBody, team) {
+      tableBody.innerHTML = '';
+      team.roster.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${p.playerId}</td><td>${p.name}</td><td>${p.position}</td><td>${p.team}</td>`;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    function renderRosters() {
+      const your = teamById(els.yourTeam.value);
+      const other = teamById(els.otherTeam.value);
+      if (!your || !other) return;
+      els.yourTeamTitle.textContent = your.name;
+      els.otherTeamTitle.textContent = other.name;
+      renderRoster(els.yourRosterTable, your);
+      renderRoster(els.otherRosterTable, other);
+    }
+
+    function updateRosterHints() {
+      const your = teamById(els.yourTeam.value);
+      const other = teamById(els.otherTeam.value);
+      els.yourRosterHint.textContent = your ? `IDs: ${your.roster.map(p => p.playerId).join(', ')}` : '';
+      els.theirRosterHint.textContent = other ? `IDs: ${other.roster.map(p => p.playerId).join(', ')}` : '';
+    }
+
+    function parseIds(input) {
+      return input.split(',').map(s => s.trim()).filter(Boolean).map(Number);
+    }
+
+    async function analyze() {
+      const fromTeamId = Number(els.yourTeam.value);
+      const toTeamId = Number(els.otherTeam.value);
+      const offerFromIds = parseIds(els.yourPlayers.value);
+      const offerToIds = parseIds(els.theirPlayers.value);
+
+      if (!offerFromIds.length && !offerToIds.length) {
+        alert('Add at least one player ID to trade.');
+        return;
+      }
+
+      const payload = { fromTeamId, toTeamId, offerFromIds, offerToIds };
+      const res = await fetch('/api/mock-trade/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Analysis failed');
+        return;
+      }
+      showResult(data);
+    }
+
+    function showResult(data) {
+      els.resultCard.style.display = 'block';
+
+      // Personalized verdict text (user is always the offering team)
+      let verdictLine = '';
+      if (data.verdict && /user gains/i.test(data.verdict)) {
+        verdictLine = `We recommend doing this trade. You gain value (+${data.valueDelta}).`;
+      } else if (data.verdict && /user loses/i.test(data.verdict)) {
+        verdictLine = `We recommend not doing this trade. Ask for a better piece (net -${Math.abs(data.valueDelta)}).`;
+      } else {
+        verdictLine = `This looks fair. (Delta ${data.valueDelta})`;
+      }
+      els.verdictText.textContent = verdictLine;
+
+    const usesYahoo = data.valuationSources?.usesYahoo;
+    els.valuationSource.innerHTML = usesYahoo
+      ? '<span class="badge yes">Using Yahoo valuations</span>'
+      : '<span class="badge no">Using fallback heuristic</span>';
+
+    els.rationaleList.innerHTML = '';
+    (data.rationale || []).forEach(r => {
+      const li = document.createElement('li');
+      li.textContent = r;
+      els.rationaleList.appendChild(li);
+    });
+    els.fromValue.textContent = data.offerFromValue;
+    els.toValue.textContent = data.offerToValue;
+    els.delta.textContent = data.valueDelta;
+  }
+
+    els.yourTeam.addEventListener('change', () => { renderRosters(); updateRosterHints(); });
+    els.otherTeam.addEventListener('change', () => { renderRosters(); updateRosterHints(); });
+    els.analyzeBtn.addEventListener('click', analyze);
+
+    loadLeague().catch(err => {
+      console.error(err);
+      alert('Failed to load league data');
+    });
+  </script>
+</body>
+</html>
