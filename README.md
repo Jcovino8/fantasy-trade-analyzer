@@ -19,6 +19,6 @@ Right now my fantasy league is programmed into it for personal use, maybe in the
 6. Analyze trades at the UI (root) or via API: `POST /api/mock-trade/analyze`
 
 ## API (mock mode)
-- `GET /api/mock-league` — mock league data
+- `GET /api/mock-league` — mock league data (My personal league with friends)
 - `GET /api/mock-team-insights/:teamId` — strengths/weaknesses
 - `POST /api/mock-trade/analyze` — analyze a proposed trade
